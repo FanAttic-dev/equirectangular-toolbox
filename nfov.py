@@ -14,52 +14,68 @@
 
 from math import pi
 import numpy as np
+import cv2
+
 
 class NFOV():
     def __init__(self, height=400, width=800):
-        self.FOV = [0.45, 0.45]
-        self.PI = pi
-        self.PI_2 = pi * 0.5
-        self.PI2 = pi * 2.0
+        self.fov = 30
+        # self.limit_horiz = pi
+        self.limit_horiz = np.deg2rad(100/2)
+        # self.limit_vert = pi * 0.5
+        self.limit_vert = np.deg2rad(80/2)
         self.height = height
         self.width = width
         self.screen_points = self._get_screen_img()
 
+    @property
+    def FOV(self):
+        return [np.deg2rad(self.fov), np.deg2rad(self.fov)]
+
     def _get_coord_rad(self, isCenterPt, center_point=None):
-        return (center_point * 2 - 1) * np.array([self.PI, self.PI_2]) \
+        return (center_point * 2 - 1) * np.array([self.limit_horiz, self.limit_vert]) \
             if isCenterPt \
             else \
-            (self.screen_points * 2 - 1) * np.array([self.PI, self.PI_2]) * (
+            (self.screen_points * 2 - 1) * np.array([self.limit_horiz, self.limit_vert]) * (
                 np.ones(self.screen_points.shape) * self.FOV)
 
     def _get_screen_img(self):
-        xx, yy = np.meshgrid(np.linspace(0, 1, self.width), np.linspace(0, 1, self.height))
+        xx, yy = np.meshgrid(np.linspace(0, 1, self.width),
+                             np.linspace(0, 1, self.height))
         return np.array([xx.ravel(), yy.ravel()]).T
 
     def _calcSphericaltoGnomonic(self, convertedScreenCoord):
         x = convertedScreenCoord.T[0]
         y = convertedScreenCoord.T[1]
 
+        lon = x
+        lat = y
+
         rou = np.sqrt(x ** 2 + y ** 2)
         c = np.arctan(rou)
         sin_c = np.sin(c)
         cos_c = np.cos(c)
 
-        lat = np.arcsin(cos_c * np.sin(self.cp[1]) + (y * sin_c * np.cos(self.cp[1])) / rou)
-        lon = self.cp[0] + np.arctan2(x * sin_c, rou * np.cos(self.cp[1]) * cos_c - y * np.sin(self.cp[1]) * sin_c)
+        lat = np.arcsin(
+            cos_c * np.sin(self.cp[1]) + (y * sin_c * np.cos(self.cp[1])) / rou)
+        lon = self.cp[0] + np.arctan2(x * sin_c, rou * np.cos(self.cp[1])
+                                      * cos_c - y * np.sin(self.cp[1]) * sin_c)
 
-        lat = (lat / self.PI_2 + 1.) * 0.5
-        lon = (lon / self.PI + 1.) * 0.5
+        # [-pi, pi] -> [0, 1]
+        lat = (lat / self.limit_vert + 1.) * 0.5
+        lon = (lon / self.limit_horiz + 1.) * 0.5
 
         return np.array([lon, lat]).T
 
     def _bilinear_interpolation(self, screen_coord):
-        uf = np.mod(screen_coord.T[0],1) * self.frame_width  # long - width
-        vf = np.mod(screen_coord.T[1],1) * self.frame_height  # lat - height
+        # [0, frame_size]
+        uf = np.mod(screen_coord.T[0], 1) * self.frame_width  # long - width
+        vf = np.mod(screen_coord.T[1], 1) * self.frame_height  # lat - height
 
         x0 = np.floor(uf).astype(int)  # coord of pixel to bottom left
         y0 = np.floor(vf).astype(int)
-        x2 = np.add(x0, np.ones(uf.shape).astype(int))  # coords of pixel to top right
+        # coords of pixel to top right
+        x2 = np.add(x0, np.ones(uf.shape).astype(int))
         y2 = np.add(y0, np.ones(vf.shape).astype(int))
 
         base_y0 = np.multiply(y0, self.frame_width)
@@ -87,10 +103,11 @@ class NFOV():
         BB = np.multiply(B, np.array([wb, wb, wb]).T)
         CC = np.multiply(C, np.array([wc, wc, wc]).T)
         DD = np.multiply(D, np.array([wd, wd, wd]).T)
-        nfov = np.reshape(np.round(AA + BB + CC + DD).astype(np.uint8), [self.height, self.width, 3])
-        import matplotlib.pyplot as plt
-        plt.imshow(nfov)
-        plt.show()
+        nfov = np.reshape(
+            np.round(AA + BB + CC + DD).astype(np.uint8), [self.height, self.width, 3])
+        # import matplotlib.pyplot as plt
+        # plt.imshow(nfov)
+        # plt.show()
         return nfov
 
     def toNFOV(self, frame, center_point):
@@ -99,7 +116,8 @@ class NFOV():
         self.frame_width = frame.shape[1]
         self.frame_channel = frame.shape[2]
 
-        self.cp = self._get_coord_rad(center_point=center_point, isCenterPt=True)
+        self.cp = self._get_coord_rad(
+            center_point=center_point, isCenterPt=True)
         convertedScreenCoord = self._get_coord_rad(isCenterPt=False)
         spericalCoord = self._calcSphericaltoGnomonic(convertedScreenCoord)
         return self._bilinear_interpolation(spericalCoord)
@@ -108,7 +126,34 @@ class NFOV():
 # test the class
 if __name__ == '__main__':
     import imageio as im
-    img = im.imread('images/360.jpg')
+    frame_orig = im.imread('images/pitch.png')
     nfov = NFOV()
-    center_point = np.array([0.5, .5])  # camera center point (valid range [0,1])
-    nfov.toNFOV(img, center_point)
+    # camera center point (valid range [0,1])
+    center_point = np.array([0.5, 0.5])
+    dx = 0.01
+    dz = 1
+    while True:
+        try:
+            img = nfov.toNFOV(frame_orig, center_point)
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            print(e)
+
+        cv2.imshow('frame', img)
+        key = cv2.waitKey(0)
+        if key == ord('d'):
+            center_point += np.array([dx, 0])
+        elif key == ord('a'):
+            center_point -= np.array([dx, 0])
+        elif key == ord('w'):
+            center_point -= np.array([0, dx])
+        elif key == ord('s'):
+            center_point += np.array([0, dx])
+        elif key == ord('+'):
+            nfov.fov -= dz
+        elif key == ord('-'):
+            nfov.fov += dz
+        elif key == ord('q'):
+            break
+
+    cv2.destroyAllWindows()
