@@ -22,8 +22,8 @@ WINDOW_FLAGS = cv2.WINDOW_NORMAL  # cv2.WINDOW_AUTOSIZE
 class NFOV():
     def __init__(self, fov_deg, fov_lens_horiz_deg, fov_lens_vert_deg, height=1080, width=1920):
         self.fov_rad = np.deg2rad(fov_deg)
-        self.fov_lens_horiz_rad = np.deg2rad(fov_lens_horiz_deg)
-        self.fov_lens_vert_rad = np.deg2rad(fov_lens_vert_deg)
+        self.lens_fov__horiz_rad = np.deg2rad(fov_lens_horiz_deg)
+        self.lens_fov_vert_rad = np.deg2rad(fov_lens_vert_deg)
         self.height = height
         self.width = width
 
@@ -33,7 +33,7 @@ class NFOV():
 
     @property
     def limits(self):
-        return np.array([self.fov_lens_horiz_rad, self.fov_lens_vert_rad]) / 2
+        return np.array([self.lens_fov__horiz_rad, self.lens_fov_vert_rad]) / 2
 
     def _screen2spherical(self, coord_screen):
         """ In range: [0, 1], out range: [-FoV_lens/2, FoV_lens/2] """
@@ -140,8 +140,8 @@ class NFOV():
 
     def get_stats(self):
         return {
-            "fov_lens_horiz": np.rad2deg(self.fov_lens_horiz_rad),
-            "fov_lens_vert": np.rad2deg(self.fov_lens_vert_rad),
+            "fov_lens_horiz": np.rad2deg(self.lens_fov__horiz_rad),
+            "fov_lens_vert": np.rad2deg(self.lens_fov_vert_rad),
             "fov": np.rad2deg(self.FOV),
         }
 
@@ -188,13 +188,13 @@ if __name__ == '__main__':
         elif key == ord('-'):
             nfov.fov_rad += dz
         elif key == ord('8'):
-            nfov.fov_lens_vert_rad += dfov
+            nfov.lens_fov_vert_rad += dfov
         elif key == ord('2'):
-            nfov.fov_lens_vert_rad -= dfov
+            nfov.lens_fov_vert_rad -= dfov
         elif key == ord('6'):
-            nfov.fov_lens_horiz_rad += dfov
+            nfov.lens_fov__horiz_rad += dfov
         elif key == ord('4'):
-            nfov.fov_lens_horiz_rad -= dfov
+            nfov.lens_fov__horiz_rad -= dfov
         elif key == ord('q'):
             break
 
