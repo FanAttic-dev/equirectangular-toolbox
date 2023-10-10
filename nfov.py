@@ -20,16 +20,16 @@ WINDOW_FLAGS = cv2.WINDOW_NORMAL  # cv2.WINDOW_AUTOSIZE
 
 
 class NFOV():
-    def __init__(self, fov_horiz_deg, fov_vert_deg, height=540, width=960):
-        self.fov_rad = np.deg2rad(50)
-        self.fov_lens_horiz_rad = np.deg2rad(fov_horiz_deg)
-        self.fov_lens_vert_rad = np.deg2rad(fov_vert_deg)
+    def __init__(self, fov_deg, fov_lens_horiz_deg, fov_lens_vert_deg, height=540, width=960):
+        self.fov_rad = np.deg2rad(fov_deg)
+        self.fov_lens_horiz_rad = np.deg2rad(fov_lens_horiz_deg)
+        self.fov_lens_vert_rad = np.deg2rad(fov_lens_vert_deg)
         self.height = height
         self.width = width
 
     @property
     def FOV(self):
-        return np.array([self.fov_rad, self.fov_rad / 16 * 9])
+        return np.array([self.fov_rad, self.fov_rad])
 
     @property
     def limits(self):
@@ -50,7 +50,7 @@ class NFOV():
     def _get_frame_spherical_fov(self):
         frame_screen = self._get_screen_frame()
         frame_spherical = self._screen2spherical(frame_screen)
-        frame_spherical_fov = frame_spherical * ((self.FOV / 2) / self.limits)
+        frame_spherical_fov = frame_spherical * self.FOV / 2
         return frame_spherical_fov
 
     def _get_screen_frame(self):
@@ -159,7 +159,8 @@ class NFOV():
 
         self.cp = self._screen2spherical(center_point)
         coord_spherical = self._get_frame_spherical_fov()
-        coord_gnomonic = self._gnomonic_forward(coord_spherical)
+        # coord_gnomonic = self._gnomonic_forward(coord_spherical)
+        coord_gnomonic = self._gnomonic_inverse(coord_spherical)
         coord_gnomonic = self._spherical2screen(coord_gnomonic)
 
         frame_painted = self.draw_coords_(frame_orig.copy(), coord_gnomonic)
@@ -177,10 +178,11 @@ class NFOV():
 # test the class
 if __name__ == '__main__':
     import imageio as im
-    frame_orig = im.imread('images/pitch.png')
+    # frame_orig = im.imread('images/pitch.png')
+    frame_orig = im.imread('images/360.jpg')
     frame_orig = cv2.cvtColor(frame_orig, cv2.COLOR_RGB2BGR)
 
-    nfov = NFOV(fov_horiz_deg=115, fov_vert_deg=90)
+    nfov = NFOV(fov_deg=50, fov_lens_horiz_deg=115, fov_lens_vert_deg=90)
 
     cv2.namedWindow("frame", WINDOW_FLAGS)
     cv2.namedWindow("frame_orig", WINDOW_FLAGS)
@@ -190,7 +192,7 @@ if __name__ == '__main__':
 
     dx = 0.05
     dz = .01
-    dfov = .01
+    dfov = .1
     while True:
         try:
             img, frame_orig_painted = nfov.toNFOV(frame_orig, center_point)
