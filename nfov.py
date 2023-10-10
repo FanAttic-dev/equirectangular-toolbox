@@ -93,49 +93,6 @@ class NFOV():
 
         return np.array([lon, lat]).T
 
-    def _bilinear_interpolation(self, screen_coord):
-        # [0, frame_size]
-        uf = np.mod(screen_coord.T[0], 1) * self.frame_width  # long - width
-        vf = np.mod(screen_coord.T[1], 1) * self.frame_height  # lat - height
-
-        x0 = np.floor(uf).astype(int)  # coord of pixel to bottom left
-        y0 = np.floor(vf).astype(int)
-        # coords of pixel to top right
-        x2 = np.add(x0, np.ones(uf.shape).astype(int))
-        y2 = np.add(y0, np.ones(vf.shape).astype(int))
-
-        base_y0 = np.multiply(y0, self.frame_width)
-        base_y2 = np.multiply(y2, self.frame_width)
-
-        A_idx = np.add(base_y0, x0)
-        B_idx = np.add(base_y2, x0)
-        C_idx = np.add(base_y0, x2)
-        D_idx = np.add(base_y2, x2)
-
-        flat_img = np.reshape(self.frame_orig, [-1, self.frame_channel])
-
-        A = np.take(flat_img, A_idx, axis=0)
-        B = np.take(flat_img, B_idx, axis=0)
-        C = np.take(flat_img, C_idx, axis=0)
-        D = np.take(flat_img, D_idx, axis=0)
-
-        wa = np.multiply(x2 - uf, y2 - vf)
-        wb = np.multiply(x2 - uf, vf - y0)
-        wc = np.multiply(uf - x0, y2 - vf)
-        wd = np.multiply(uf - x0, vf - y0)
-
-        # interpolate
-        AA = np.multiply(A, np.array([wa, wa, wa]).T)
-        BB = np.multiply(B, np.array([wb, wb, wb]).T)
-        CC = np.multiply(C, np.array([wc, wc, wc]).T)
-        DD = np.multiply(D, np.array([wd, wd, wd]).T)
-        nfov = np.reshape(
-            np.round(AA + BB + CC + DD).astype(np.uint8), [self.height, self.width, 3])
-        # import matplotlib.pyplot as plt
-        # plt.imshow(nfov)
-        # plt.show()
-        return nfov
-
     def _remap(self, coords):
         """ In range: [0, 1] """
 
@@ -179,7 +136,6 @@ class NFOV():
 
         frame_painted = self.draw_coords_(frame_orig.copy(), coords_screen_fov)
 
-        # return self._bilinear_interpolation(coords_screen_fov), frame_painted
         return self._remap(coords_screen_fov), frame_painted
 
     def get_stats(self):
