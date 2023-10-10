@@ -20,7 +20,7 @@ WINDOW_FLAGS = cv2.WINDOW_NORMAL  # cv2.WINDOW_AUTOSIZE
 
 
 class NFOV():
-    def __init__(self, fov_deg, fov_lens_horiz_deg, fov_lens_vert_deg, height=540, width=960):
+    def __init__(self, fov_deg, fov_lens_horiz_deg, fov_lens_vert_deg, height=1080, width=1920):
         self.fov_rad = np.deg2rad(fov_deg)
         self.fov_lens_horiz_rad = np.deg2rad(fov_lens_horiz_deg)
         self.fov_lens_vert_rad = np.deg2rad(fov_lens_vert_deg)
@@ -137,7 +137,15 @@ class NFOV():
         return nfov
 
     def _remap(self, coords):
-        cv2.remap()
+        """ In range: [0, 1] """
+
+        map_x = (coords[:, 0] * self.frame_width).astype(np.float32)
+        map_x = np.reshape(map_x, [self.height, self.width])
+
+        map_y = (coords[:, 1] * self.frame_height).astype(np.float32)
+        map_y = np.reshape(map_y, [self.height, self.width])
+
+        return cv2.remap(frame_orig, map_x, map_y, interpolation=cv2.INTER_LINEAR)
 
     def draw_coords_(self, frame_orig, coords):
         xs = np.floor(coords.T[0] * self.frame_width).astype(np.int32)
@@ -165,24 +173,14 @@ class NFOV():
         coords_spherical = self._screen2spherical(coords_screen_orig)
         coords_spherical_fov = coords_spherical * (self.FOV / 2 / self.limits)
 
-        # coords_spherical_fov = self._gnomonic_forward(coords_spherical_fov)
-        coords_spherical_fov = self._gnomonic_inverse(coords_spherical_fov)
+        coords_spherical_fov = self._gnomonic_forward(coords_spherical_fov)
+        # coords_spherical_fov = self._gnomonic_inverse(coords_spherical_fov)
         coords_screen_fov = self._spherical2screen(coords_spherical_fov)
 
-        # TODO: use remap
-        # frame_orig = cv2.resize(frame_orig, (self.width, self.height))
-        # sz = np.array([self.frame_width, self.frame_height])
-        # map1 = np.reshape(
-        #     (coords_screen_orig * sz).astype(np.uint8), [self.height, self.width])
-        # map2 = np.reshape(
-        #     (coords_screen_fov * sz).astype(np.uint8), [self.height, self.width])
-        # remapped = cv2.remap(
-        # frame_orig, map1, map2, interpolation=cv2.INTER_LINEAR)
-
         frame_painted = self.draw_coords_(frame_orig.copy(), coords_screen_fov)
-        return self._bilinear_interpolation(coords_screen_fov), frame_painted
-        # return self._remap(coords), frame_painted
-        # return remapped, frame_painted
+
+        # return self._bilinear_interpolation(coords_screen_fov), frame_painted
+        return self._remap(coords_screen_fov), frame_painted
 
     def get_stats(self):
         return {
@@ -195,12 +193,12 @@ class NFOV():
 # test the class
 if __name__ == '__main__':
     import imageio as im
-    # frame_orig = im.imread('images/pitch.png')
-    frame_orig = im.imread('images/360.jpg')
+    frame_orig = im.imread('images/pitch.png')
+    # frame_orig = im.imread('images/360.jpg')
     frame_orig = cv2.cvtColor(frame_orig, cv2.COLOR_RGB2BGR)
 
-    # nfov = NFOV(fov_deg=50, fov_lens_horiz_deg=115, fov_lens_vert_deg=99)
-    nfov = NFOV(fov_deg=90, fov_lens_horiz_deg=360, fov_lens_vert_deg=180)
+    nfov = NFOV(fov_deg=50, fov_lens_horiz_deg=115, fov_lens_vert_deg=99)
+    # nfov = NFOV(fov_deg=90, fov_lens_horiz_deg=360, fov_lens_vert_deg=180)
 
     cv2.namedWindow("frame", WINDOW_FLAGS)
     cv2.namedWindow("frame_orig", WINDOW_FLAGS)
