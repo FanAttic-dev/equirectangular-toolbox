@@ -20,20 +20,25 @@ WINDOW_FLAGS = cv2.WINDOW_NORMAL  # cv2.WINDOW_AUTOSIZE
 
 
 class NFOV():
-    def __init__(self, fov_deg, fov_lens_horiz_deg, fov_lens_vert_deg, height=1080, width=1920):
+    def __init__(self, fov_deg, fov_lens_horiz_deg, height=1080, width=1920):
         self.fov_rad = np.deg2rad(fov_deg)
-        self.lens_fov__horiz_rad = np.deg2rad(fov_lens_horiz_deg)
-        self.lens_fov_vert_rad = np.deg2rad(fov_lens_vert_deg)
+        self.lens_fov_horiz_rad = np.deg2rad(fov_lens_horiz_deg)
+        self.lens_fov_vert_rad = self.lens_fov_horiz_rad / 16 * 9
         self.height = height
         self.width = width
+        self.tilt = 50
 
     @property
     def FOV(self):
         return np.array([self.fov_rad, self.fov_rad / 16 * 9])
 
+    # @property
+    # def lens_fov_vert_rad(self):
+    #     return self.lens_fov_horiz_rad / 16 * 9
+
     @property
     def limits(self):
-        return np.array([self.lens_fov__horiz_rad, self.lens_fov_vert_rad]) / 2
+        return np.array([self.lens_fov_horiz_rad, self.lens_fov_vert_rad]) / 2
 
     def _screen2spherical(self, coord_screen):
         """ In range: [0, 1], out range: [-FoV_lens/2, FoV_lens/2] """
@@ -58,13 +63,16 @@ class NFOV():
                              np.linspace(0, 1, self.height))
         return np.array([xx.ravel(), yy.ravel()]).T
 
-    def _gnomonic_forward(self, coord_spherical):
+    def _gnomonic_forward(self, coord_spherical, center=None):
         """ In/out range: [-FoV_lens/2, FoV_lens/2] """
 
         lambda_rad = coord_spherical.T[0]
         phi_rad = coord_spherical.T[1]
-        center_pan_rad = -self.cp[0]
-        center_tilt_rad = -self.cp[1]
+        if center is None:
+            center_pan_rad = -self.cp[0]
+            center_tilt_rad = -self.cp[1]
+        else:
+            center_pan_rad, center_tilt_rad = center
 
         cos_c = np.sin(center_tilt_rad) * np.sin(phi_rad) + np.cos(center_tilt_rad) * \
             np.cos(phi_rad) * np.cos(lambda_rad - center_pan_rad)
@@ -75,7 +83,7 @@ class NFOV():
 
         return np.array([x, y]).T
 
-    def _gnomonic_inverse(self, coord_spherical):
+    def _gnomonic_inverse(self, coord_spherical, center=None):
         """ In/out range: [-FoV_lens/2, FoV_lens/2] """
 
         x = coord_spherical.T[0]
@@ -86,10 +94,14 @@ class NFOV():
         sin_c = np.sin(c)
         cos_c = np.cos(c)
 
+        cp0, cp1 = self.cp
+        if center is not None:
+            cp0, cp1 = center
+
         lat = np.arcsin(
-            cos_c * np.sin(self.cp[1]) + (y * sin_c * np.cos(self.cp[1])) / rou)
-        lon = self.cp[0] + np.arctan2(x * sin_c, rou * np.cos(self.cp[1])
-                                      * cos_c - y * np.sin(self.cp[1]) * sin_c)
+            cos_c * np.sin(cp1) + (y * sin_c * np.cos(cp1)) / rou)
+        lon = cp0 + np.arctan2(x * sin_c, rou * np.cos(cp1)
+                               * cos_c - y * np.sin(cp1) * sin_c)
 
         return np.array([lon, lat]).T
 
@@ -99,7 +111,8 @@ class NFOV():
         map_x = (coords[:, 0] * self.frame_width).astype(np.float32)
         map_x = np.reshape(map_x, [self.height, self.width])
 
-        map_y = (coords[:, 1] * self.frame_height).astype(np.float32)
+        map_y = (coords[:, 1] *
+                 self.frame_height).astype(np.float32)
         map_y = np.reshape(map_y, [self.height, self.width])
 
         return cv2.remap(frame_orig, map_x, map_y, interpolation=cv2.INTER_LINEAR)
@@ -130,8 +143,15 @@ class NFOV():
         coords_spherical = self._screen2spherical(coords_screen_orig)
         coords_spherical_fov = coords_spherical * (self.FOV / 2 / self.limits)
 
-        coords_spherical_fov = self._gnomonic_forward(coords_spherical_fov)
-        # coords_spherical_fov = self._gnomonic_inverse(coords_spherical_fov)
+        # map onto a sphere
+        coords_spherical_fov = self._gnomonic_inverse(
+            coords_spherical_fov)
+
+        # map onto a plane
+        # coords_spherical_fov = self._gnomonic_forward(
+        #     coords_spherical_fov)
+        # coords_spherical_fov = self._gnomonic_inverse(
+        #     coords_spherical_fov, center=(0, self.tilt))
         coords_screen_fov = self._spherical2screen(coords_spherical_fov)
 
         frame_painted = self.draw_coords_(frame_orig.copy(), coords_screen_fov)
@@ -140,21 +160,26 @@ class NFOV():
 
     def get_stats(self):
         return {
-            "fov_lens_horiz": np.rad2deg(self.lens_fov__horiz_rad),
+            "fov_lens_horiz": np.rad2deg(self.lens_fov_horiz_rad),
             "fov_lens_vert": np.rad2deg(self.lens_fov_vert_rad),
             "fov": np.rad2deg(self.FOV),
+            "tilt": np.rad2deg(self.tilt)
         }
 
 
 # test the class
 if __name__ == '__main__':
     import imageio as im
-    frame_orig = im.imread('images/pitch.png')
+    # frame_orig = im.imread('images/curvilinear.png')
+    # frame_orig = im.imread('images/pitch.png')
+    frame_orig = im.imread('images/pitch_grid.png')
     # frame_orig = im.imread('images/360.jpg')
+    # frame_orig = im.imread('images/pitch_fisheye.png')
     frame_orig = cv2.cvtColor(frame_orig, cv2.COLOR_RGB2BGR)
 
-    nfov = NFOV(fov_deg=50, fov_lens_horiz_deg=115, fov_lens_vert_deg=99)
-    # nfov = NFOV(fov_deg=90, fov_lens_horiz_deg=360, fov_lens_vert_deg=180)
+    nfov = NFOV(fov_deg=50, fov_lens_horiz_deg=115)
+    # nfov = NFOV(fov_deg=90, fov_lens_horiz_deg=360)
+    # nfov = NFOV(fov_deg=120, fov_lens_horiz_deg=150)
 
     cv2.namedWindow("frame", WINDOW_FLAGS)
     cv2.namedWindow("frame_orig", WINDOW_FLAGS)
@@ -163,8 +188,9 @@ if __name__ == '__main__':
     center_point = np.array([0.5, 0.5])
 
     dx = 0.05
-    dz = .01
-    dfov = .1
+    dz = .25
+    dfov = .025
+    dtilt = np.deg2rad(5)
     while True:
         try:
             img, frame_orig_painted = nfov.toNFOV(frame_orig, center_point)
@@ -192,9 +218,13 @@ if __name__ == '__main__':
         elif key == ord('2'):
             nfov.lens_fov_vert_rad -= dfov
         elif key == ord('6'):
-            nfov.lens_fov__horiz_rad += dfov
+            nfov.lens_fov_horiz_rad += dfov
         elif key == ord('4'):
-            nfov.lens_fov__horiz_rad -= dfov
+            nfov.lens_fov_horiz_rad -= dfov
+        elif key == ord('p'):
+            nfov.tilt += dtilt
+        elif key == ord('m'):
+            nfov.tilt -= dtilt
         elif key == ord('q'):
             break
 
